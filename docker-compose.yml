@@ -1,8 +1,6 @@
 version: "3.9"
 
 services:
-  rabbit:
+  broker:
     image: rabbitmq:3
-
-  server:
-    build: .
+  
