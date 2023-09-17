@@ -1,0 +1,8 @@
+version: "3.9"
+
+services:
+  rabbit:
+    image: rabbitmq:3
+
+  server:
+    build: .
