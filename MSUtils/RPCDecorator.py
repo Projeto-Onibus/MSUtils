@@ -1,25 +1,17 @@
-import pika
 import json
+import uuid
 
-import logging
-
-logger = logging.getLogger("MyLogger")
-fh = logging.StreamHandler()
-fh_formatter = logging.Formatter('%(asctime)s %(levelname)s %(lineno)d:%(filename)s(%(process)d) - %(message)s')
-fh.setFormatter(fh_formatter)
-logger.addHandler(fh)
+import pika
 
 from .AppException import AppException
+from .Logger import CreateLogger
 
-logger.setLevel(logging.DEBUG)
 
 def RPCCall(methodList, name):
 
     def RPCCallFunction(func):
         def on_call(ch, method, props, body):
 
-            logger.debug("Entered call")
-            
             response = {
                 "status-code":502,
                 "message": "Nothing was processed."
@@ -28,8 +20,6 @@ def RPCCall(methodList, name):
             invalidData = False
             # Try to convert the message's body as JSON, 
             try:
-                logger.debug("Received message")
-                logger.debug(f"message: {body.decode('UTF-8')}")
                 kwargs = json.loads(body.decode('UTF-8'))
             except Exception as err:
                 response = {
