@@ -4,6 +4,10 @@ import pika
 
 from MSUtils.RPCDecorator import RPCCall, InitiateMethods
 from MSUtils.AppException import AppException
+from MSUtils.Logger import CreateLogger
+
+logger = CreateLogger("localhost:3000",{"Application":"MSUtils"})
+logger.setLevel(logging.DEBUG)
 
 methodList = []
 
