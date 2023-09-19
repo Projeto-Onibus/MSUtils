@@ -22,36 +22,37 @@ class FibonacciRpcClient(object):
 
         self.response = None
         self.corr_id = None
+        self.timeout = 20
 
     def on_response(self, ch, method, props, body):
         if self.corr_id == props.correlation_id:
             self.response = body
 
-    def call(self, n):
+    def MakeCall(self, name, n):
         self.response = None
         self.corr_id = str(uuid.uuid4())
         self.channel.basic_publish(
             exchange='',
-            routing_key='test_queue',
+            routing_key=name,
             properties=pika.BasicProperties(
                 reply_to=self.callback_queue,
                 correlation_id=self.corr_id,
             ),
             body=json.dumps(n))
-        self.connection.process_data_events(time_limit=20)
+        self.connection.process_data_events(time_limit=self.timeout)
         if not self.response:
-            return -1
+            raise Exception("No response from broker")
         return self.response
 
 
 fibonacci_rpc = FibonacciRpcClient()
 
 print(" [x] Requesting fib(30)")
-response = fibonacci_rpc.call({"test":80,"name":"value"})
+response = fibonacci_rpc.MakeCall('test_queue',{"test":80,"name":"value"})
 print(f" [.] Got {json.loads(response)}")
-response = fibonacci_rpc.call({"test":70,"name":"value2"})
+response = fibonacci_rpc.MakeCall('test_queue',{"test":70,"name":"value2"})
 print(f" [.] Got {json.loads(response)}")
-response = fibonacci_rpc.call({"test":60,"name":"value3"})
+response = fibonacci_rpc.MakeCall('test_queue',{"test":60,"name":"value3"})
 print(f" [.] Got {json.loads(response)}")
-response = fibonacci_rpc.call({"test":0,"name":"valu4e"})
+response = fibonacci_rpc.MakeCall('test_queue',{"test":0,"name":"valu4e"})
 print(f" [.] Got {json.loads(response)}")
