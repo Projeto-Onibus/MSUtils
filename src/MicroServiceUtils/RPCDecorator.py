@@ -7,7 +7,7 @@ from .AppException import AppException
 from .Logger import CreateLogger
 
 
-def RPCCall(methodList, name):
+def RPCCall(name):
 
     def RPCCallFunction(func):
         def on_call(ch, method, props, body):
@@ -61,9 +61,10 @@ def RPCCall(methodList, name):
                 body=json.dumps(response))
             ch.basic_ack(delivery_tag=method.delivery_tag)
 
-        methodList.append({'name':name,'method':on_call})
         return on_call
     return RPCCallFunction
+
+
 
 
 def CreateRPC(channel, name, functionHandler):
