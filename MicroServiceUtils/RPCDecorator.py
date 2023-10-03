@@ -1,26 +1,23 @@
 import json
 import uuid
+import logging 
 
 import pika
 
 from .AppException import AppException
-from .Logger import CreateLogger
 
 
-def RPCCall(name):
-
+def RPCCall(name,logger,client):
     def RPCCallFunction(func):
         def on_call(ch, method, props, body):
 
-            response = {
-                "status-code":502,
-                "message": "Nothing was processed."
-            }
-            
             invalidData = False
+            
+            logger.EndTransaction() # Removes any previous transaction id 
+
             # Try to convert the message's body as JSON, 
             try:
-                kwargs = json.loads(body.decode('UTF-8'))
+                parameters = json.loads(body.decode('UTF-8'))
             except Exception as err:
                 response = {
                         'status-code':400,
@@ -29,30 +26,48 @@ def RPCCall(name):
                         "python-exception-message":str(err)
                 }
                 invalidData = True
-                logger.warning("Failed to convert data to JSON")
+                logger.error(f"Failed to convert data to JSON. Bad request from '{props.reply_to}'")
+           
+            # Process transaction id 
+            if not 'transaction_id' in parameters.keys():
+                response = {
+                    'status_code':400,
+                    'message':"No transaction id set"
+                }
+                invalidData = True
+                logger.error(f"No transaction id was set by the request. Bad request from '{props.reply_to}'")
             
             if not invalidData:
-                logger.debug("Valid data, trying to process")
+                
+                logger.SetTransactionId(parameters['transaction_id'])
+                del parameters['transaction_id']
+
+                logger.debug("Valid request. Start processing.")
+
                 # Apply the function
                 try:
-                    response = func(kwargs)
-                    logger.debug("Data processed")
+                    response = func(parameters,logger=logger,client=client)
+                    logger.debug("Function end")
+
                 # Error given by function
                 except AppException as err:
                     logger.debug("App Exception")
                     response = {
-                            'status-code':err.statusCode,
-                            "message":err.message
+                            'status-code': err.statusCode,
+                            "message": err.message
                     }
+
                 # Any other Error
                 except Exception as err:
                     logger.debug("Other exception")
                     response = {
-                            "status-code":"502",
-                            "message":err.message,
-                            "python-exception-type":type(err).__name__
+                        "status-code":502,
+                        "python-exception-type":type(err).__name__,
+                        "python-exception-message":str(err)
                     } 
-            logger.debug("Sending message")
+                response['status-code'] = 200
+                response['transaction_id'] = logger.GetTransactionId()
+
             # Define response
             ch.basic_publish(exchange='',
                 routing_key=props.reply_to,
@@ -60,12 +75,11 @@ def RPCCall(name):
                         props.correlation_id),
                 body=json.dumps(response))
             ch.basic_ack(delivery_tag=method.delivery_tag)
+            
+            logger.EndTransaction()
 
         return on_call
     return RPCCallFunction
-
-
-
 
 def CreateRPC(channel, name, functionHandler):
     channel.queue_declare(queue=name)
