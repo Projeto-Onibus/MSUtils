@@ -9,9 +9,10 @@ This library will deal with the following features:
 - Some middleware functions such as:
     - Transaction UUID creation and tracking
 
-## Current roadmap
+## Usage
 
-There's a decorator and a channel initializer to ease server-side code's development. 
-Next step is to create a library for client-side. This 
+In the `examples` directory there are three main use cases for this library:
+- `client.py`: Demonstrates how a client application can interact with the broker to do requests.
+- `server.py`: Demonstrates how a server application can be built to handle requests.
+- `server-on-server.py`: Demonstrates how a server application can ask requests as a client to other servers. 
 
-The logger will be defined with python-logging-loki.
