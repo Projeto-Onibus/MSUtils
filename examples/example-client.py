@@ -14,8 +14,8 @@ from MicroServiceUtils.Logger import MSLogger
 
 # Start logger to log data in loki server
 logger = MSLogger("client",host='localhost',port=3100)
-
 logger.setLevel(logging.DEBUG)
+
 #
 # Main usage
 # 
@@ -25,13 +25,13 @@ logger.info("Starting client example")
 # Start a client object
 client = RPCClient(host='localhost',logger=logger)
 
-# Create parameters
+# Create parameters to send in request
+# Dict must be JSONfiable
 parameters = {"matrix":[
     [1,2,3],
     [4,5,6],
     [7,8,9]
 ]}
-
 
 # Make a request
 try:
