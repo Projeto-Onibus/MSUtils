@@ -34,7 +34,6 @@ class RPCClient(object):
         self.timeout = 120 # Default timeout value
 
         self.logger.info(f"Client initialized. Callback queue set as '{self.callback_queue}'")
-        self.transactionLog = []
 
     def on_response(self, ch, method, props, body):
         self.logger.info("Got response!")
@@ -79,8 +78,8 @@ class RPCClient(object):
         self.connection.process_data_events(time_limit=self.timeout)
         
         if not self.response:
-            raise Exception("No response from broker")
-        
+            return {'status_code':503,'error-message':"Service unresponsive or unavailable."} 
+
         return self.response.copy()
     
     def StartTransaction(self,name,n):
@@ -113,7 +112,6 @@ class RPCClient(object):
             exceptionRaised = err
         finally:
             # Finalizes the transaction before raising the exception
-            self.transactionLog.append(self.logger.GetTransactionId())
             self.logger.EndTransaction()
         
         if executionFailed:

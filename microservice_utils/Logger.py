@@ -39,13 +39,13 @@ class MSLogger:
         fh_formatter = logging.Formatter('%(message)s')
         fh.setFormatter(fh_formatter)
         self.logger.addHandler(fh)
-        
-        self.counter = 0
+        self.tags = {} 
+        self.transactionCounter = 0
 
     # Transaction Id 
     def NewTransaction(self):
-        self.transactionId = str(uuid.uuid4())
-        self.logger.debug('New transaction',extra={'tags':{'transaction_id':self.transactionId}})
+        self.transactionId = str(uuid.uuid4())[-12:]
+        self.ResetTransactionCounter()
 
     def SetTransactionId(self,newId):
         self.transactionId = str(newId)
@@ -55,40 +55,39 @@ class MSLogger:
 
     def EndTransaction(self):
         self.transactionId = ""
-        self.logger.debug('Finished transaction',extra={'tags':{'transaction_id':self.transactionId}})
 
     def HasTransactionId(self):
         return len(self.transactionId)>0
 
-    def ResetGlobalCounter(self):
-        self.globalCounter = 0
+    def ResetTransactionCounter(self):
+        self.transactionCounter = 0
 
-    def GetGlobalCounter(self):
-        return self.globalCounter
+    def GetTransactionCounter(self):
+        return self.transactionCounter
 
-    def SetGlobalCounter(self,value):
-        self.globalCounter = value 
+    def SetTransactionCounter(self,value):
+        self.transactionCounter = value 
 
     # Logs
     def debug(self,message):
-        self.logger.debug(f"[{self.transactionId}]#{self.counter}:" + message)
-        self.counter += 1
+        self.logger.debug(f"[{self.transactionId}]#{self.transactionCounter}:" + message,extra=self.tags)
+        self.transactionCounter += 1
 
     def info(self,message):
-        self.logger.info(f"[{self.transactionId}]#{self.counter}:" + message)
-        self.counter += 1
+        self.logger.info(f"[{self.transactionId}]#{self.transactionCounter}:" + message,extra=self.tags)
+        self.transactionCounter += 1
 
     def warning(self,message):
-        self.logger.warning(f"[{self.transactionId}]#{self.counter}:" + message)
-        self.counter += 1
+        self.logger.warning(f"[{self.transactionId}]#{self.transactionCounter}:" + message,extra=self.tags)
+        self.transactionCounter += 1
 
     def error(self,message):
-        self.logger.error(f"[{self.transactionId}]#{self.counter}:" + message)
-        self.counter += 1
+        self.logger.error(f"[{self.transactionId}]#{self.transactionCounter}:" + message,extra=self.tags)
+        self.transactionCounter += 1
 
     def critical(self,message):
-        self.logger.critical(f"[{self.transactionId}]#{self.counter}:" + message)
-        self.counter += 1
+        self.logger.critical(f"[{self.transactionId}]#{self.transactionCounter}:" + message,extra=self.tags)
+        self.transactionCounter += 1
 
     def setLevel(self,logLevel):
         self.logger.setLevel(logLevel)

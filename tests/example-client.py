@@ -14,6 +14,7 @@ from microservice_utils.Logger import MSLogger
 
 # Start logger to log data in loki server
 logger = MSLogger("client",host='localhost',port=3100)
+cache = MSCache(host='localhost',port=)
 logger.setLevel(logging.DEBUG)
 
 #

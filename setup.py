@@ -11,6 +11,7 @@ setup(name='microservice_utils',
       packages=['microservice_utils'],
       install_requires=[
         'python-logging-loki',
-        'pika'
+        'pika',
+        'redis'
       ],
       zip_safe=False)
