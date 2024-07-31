@@ -7,6 +7,7 @@
 # 
 import uuid
 import logging
+import requests
 from multiprocessing import Queue
 
 import logging_loki
@@ -27,10 +28,10 @@ class MSLogger:
         
         self.logger = logging.getLogger(loggerName)
         self.transactionId = ""
-        
+        self.post_url = f"http://{host}:{port}/loki/api/v1/push"
         fh = logging_loki.LokiQueueHandler(
                 Queue(-1),
-                url=f"http://{host}:{port}/loki/api/v1/push",
+                url=self.post_url,
                 tags=tags,
                 version="1"
         )
@@ -44,6 +45,7 @@ class MSLogger:
     # Transaction Id 
     def NewTransaction(self):
         self.transactionId = str(uuid.uuid4())
+        self.logger.debug('New transaction',extra={'tags':{'transaction_id':self.transactionId}})
 
     def SetTransactionId(self,newId):
         self.transactionId = str(newId)
@@ -53,7 +55,8 @@ class MSLogger:
 
     def EndTransaction(self):
         self.transactionId = ""
-    
+        self.logger.debug('Finished transaction',extra={'tags':{'transaction_id':self.transactionId}})
+
     def HasTransactionId(self):
         return len(self.transactionId)>0
 
@@ -63,7 +66,8 @@ class MSLogger:
     def GetGlobalCounter(self):
         return self.globalCounter
 
-    def SetGo
+    def SetGlobalCounter(self,value):
+        self.globalCounter = value 
 
     # Logs
     def debug(self,message):

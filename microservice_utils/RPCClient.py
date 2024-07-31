@@ -5,6 +5,7 @@ import json
 from .Logger import MSLogger
 
 class RPCClient(object):
+    
 
     def __init__(self,host='localhost',logger=None):
         
@@ -44,7 +45,7 @@ class RPCClient(object):
             
             # Assures that the transaction id is saved in the logger object
             if self.response['transaction_id'] != self.logger.GetTransactionId():
-                self.logger.critical("No clue how the transactions could have mixed up like this")
+                self.logger.critical("Response from another transaction")
                 raise Exception("Invalid transaction id for received process")
 
             # removes transaction id from answer
@@ -80,7 +81,7 @@ class RPCClient(object):
         if not self.response:
             raise Exception("No response from broker")
         
-        return self.response
+        return self.response.copy()
     
     def StartTransaction(self,name,n):
         """
@@ -101,7 +102,7 @@ class RPCClient(object):
         # Creates a new transaction id before warning of overwrite with previous transaction
         self.logger.NewTransaction()
         if hasTransactionId:
-            self.logger.warning(f"Starting new transaction with unresolved transaction: [{oldTransactionId}]")
+            self.logger.warning(f"Started from previously unresolved transaction: [{oldTransactionId}]")
         self.logger.info(f"Started new transaction of type '{name}'")
 
         executionFailed = False

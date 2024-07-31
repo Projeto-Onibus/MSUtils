@@ -9,10 +9,26 @@ This library will deal with the following features:
 - Some middleware functions such as:
     - Transaction UUID creation and tracking
 
-## Usage
+## Testing
 
-In the `examples` directory there are three main use cases for this library:
-- `client.py`: Demonstrates how a client application can interact with the broker to do requests.
-- `server.py`: Demonstrates how a server application can be built to handle requests.
-- `server-on-server.py`: Demonstrates how a server application can ask requests as a client to other servers. 
+To test this application, first install the package locally by running on the root of this repository
+
+```
+python3 -m pip install .
+```
+
+After, go to `tests` and raise the conteiners in the compose files. This can be done using:
+
+```
+docker compose up -d
+```
+
+After this, initiate in the background the `example-server-*.py` microservices and do a request using `example-client.py`.
+
+## Roadmap 
+
+- [ ] (Bugfix) positive status-code passing through the MakeCall command
+- [ ] Have a way to query transaction ids in grafana
+- [ ] Pass the global counter with the transaction_ids
+- [ ] Add schema validation to services
 

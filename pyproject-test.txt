@@ -1,0 +1,24 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "MicroServiceUtils"
+version = "0.1.0"
+authors = [
+  { name="Fernando Dias", email="fernando.dias@poli.ufrj.br" },
+]
+description = "A python package that implement Client and Server models in a Microservice architecture"
+readme = "README.md"
+requires-python = ">=3.8"
+requires = ['pika','logging_loki']
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Education",
+    "Programming Language :: Python :: 3 :: Only"
+]
+
+[project.urls]
+Homepage = "https://github.com/Projeto-Onibus/MSUtils"
+Issues = "https://github.com/pypa/Projeto-Onibus/MSUtils/issues"

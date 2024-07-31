@@ -9,8 +9,8 @@ import logging
 # 
 
 # Import libraries
-from MicroServiceUtils.RPCClient import RPCClient
-from MicroServiceUtils.Logger import MSLogger
+from microservice_utils.RPCClient import RPCClient
+from microservice_utils.Logger import MSLogger
 
 # Start logger to log data in loki server
 logger = MSLogger("client",host='localhost',port=3100)
@@ -36,7 +36,7 @@ parameters = {"matrix":[
 # Make a request
 try:
     logger.info("Making call")
-    result = client.StartTransaction("get_diagonal",parameters)
+    result = client.StartTransaction("sum_diagonal",parameters)
     logger.info("Received result")
 except Exception as err:
     print(f"Request failed due to exception: {err}")

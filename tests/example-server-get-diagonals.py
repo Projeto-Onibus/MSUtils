@@ -3,8 +3,8 @@ import logging
 sys.path.append('..')
 
 # Import Server utils and Logger utils
-from MicroServiceUtils.RPCServer import RPCServer
-from MicroServiceUtils.Logger import MSLogger
+from microservice_utils.RPCServer import RPCServer
+from microservice_utils.Logger import MSLogger
 
 # Create a logger that indicates the name of the MS
 logger = MSLogger("get_diagonals",host='localhost',port=3100)
@@ -22,7 +22,8 @@ def GetDiagonals(parameters,logger,client):
         result[key] = []
         for index in range(len(parameters[key])):
             result[key].append(parameters[key][index][index])
-    
+        
+        logger.info(f"Returning {result[key]} for '{key}'")
     # returns dict object that can be "JSONfied"
     return result
 
