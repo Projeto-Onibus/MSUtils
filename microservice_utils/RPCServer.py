@@ -47,36 +47,48 @@ def RPCCall(name:str, func, logger: MSLogger, client:RPCClient, cache:RPCCache):
 
         # Defines default value for transaction ID in logs
         logger.SetTransactionId("None") 
+        
+        try: 
+            requestData, response = ParseBodyToJSON(body)
 
-        requestData, response = ParseBodyToJSON(body)
-
-        if not response:
-            functionParameters, response = ParseTransactionParameters(requestData)
-
-        # No logs before this
-        logger.info('Received request')
-
-        fromCache = False 
-        if not response:
-            fromCache = True 
-            response = GetResponseFromCache(functionParameters)
-            logger.info('Cached response')
-
-        if not response:
-            response = ApplyFunction(functionParameters)
+            if not response:
+                functionParameters, response = ParseTransactionParameters(requestData)
             
-        if response['status-code']==200 and not fromCache:
-            SetCache(parameters,response)
-        
-        response = SetTransactionParameters(response)
-        
-        # No logs after this
+            # No logs before this
+            logger.info("Request successfuly received")
+            logger.debug(f"Parameters sent: {functionParameters}")
+
+            fromCache = False 
+            if not response:
+                fromCache = True 
+                response = GetResponseFromCache(functionParameters)
+                logger.info('Cached response')
+
+            if not response:
+                response = ApplyFunction(functionParameters)
+                
+            if response['status-code']==200 and not fromCache:
+                SetCache(parameters,response)
+            
+            response = SetTransactionParameters(response)
+            
+        except Exception as err:
+            logger.error("Caught exception from the server's callback function")
+            logger.LogException(err)
+            response = {
+                'status-code':502,
+                'error-message':"Internal server error"
+            }
 
         try:
-            PublishResponse(response)
+            ch.basic_publish(exchange='',
+                routing_key=props.reply_to,
+                properties=pika.BasicProperties(correlation_id = \
+                        props.correlation_id),
+                body=json.dumps(response))
         except Exception as err:
-            logger.critical("Unable to send response due to unkonwn error")
-            logger.critical(f"{err}")
+            logger.critical("Unable to send response through basic_publish")
+            logger.LogException(err)
 
         logger.EndTransaction()
 
@@ -95,6 +107,8 @@ def RPCCall(name:str, func, logger: MSLogger, client:RPCClient, cache:RPCCache):
             cache.SetResult(name,parameters,response) 
 
     def ApplyFunction(parameters):
+        if 'status-code' in parameters.keys():
+            del parameters['status-code']
         try:
             logger.debug("Function start")
             response = func(parameters,logger=logger,client=client)
@@ -102,31 +116,12 @@ def RPCCall(name:str, func, logger: MSLogger, client:RPCClient, cache:RPCCache):
             response['status-code'] = 200
         # Error given by function
         except ClientException as err:
-            logger.debug("Client exception")
+            logger.info("Caught client exception")
             response = {
                     'status-code': 400,
                     "error-message": err.message
             }
-        # Any other Error
-        except Exception as err:
-            logger.debug("Other exception")
-            response = {
-                "status-code":502,
-                "error-message":"Internal server error",
-                "python-exception-type":type(err).__name__,
-                "python-exception-message":str(err)
-            }
         return response 
-
-    def PublishResponse(response):
-        # Define response
-        ch.basic_publish(exchange='',
-            routing_key=props.reply_to,
-            properties=pika.BasicProperties(correlation_id = \
-                    props.correlation_id),
-            body=json.dumps(response))
-        ch.basic_ack(delivery_tag=method.delivery_tag)
-
 
     def ParseBodyToJSON(body):
         """
@@ -159,15 +154,22 @@ def RPCCall(name:str, func, logger: MSLogger, client:RPCClient, cache:RPCCache):
                 }
         
             logger.SetTransactionId(parameters['transaction_id'])
-            logger.SetTransactionCounter(parameters['transaction_counter'])
+            logger.SetTransactionCounter(parameters['transaction_counter']+1)
         
             del parameters['transaction_id']
             del parameters['transaction_counter']
+
+            if 'status-code' in parameters.keys():
+                del parameters['status-code']
+
         except Exception as err:
+            logger.error("Exception caught when parsing transaction parameters")
+            logger.LogException(err)
             response = {'status-code':502,
                         'error-message': "Unexpected error",
                         'python-error-message':f"{err}"
             }
+
         return parameters, response 
     
     def SetTransactionParameters(response):
@@ -180,7 +182,7 @@ def RPCCall(name:str, func, logger: MSLogger, client:RPCClient, cache:RPCCache):
 def CreateRPC(channel, name, functionHandler):
     channel.queue_declare(queue=name)
     channel.basic_qos(prefetch_count=1)
-    channel.basic_consume(queue=name,on_message_callback=functionHandler)
+    channel.basic_consume(queue=name,on_message_callback=functionHandler,auto_ack=True)
 
 
 def InitiateMethods(channel,methodList):

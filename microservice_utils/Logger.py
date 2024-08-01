@@ -8,6 +8,7 @@
 import uuid
 import logging
 import requests
+import traceback
 from multiprocessing import Queue
 
 import logging_loki
@@ -67,6 +68,13 @@ class MSLogger:
 
     def SetTransactionCounter(self,value):
         self.transactionCounter = value 
+
+    def LogException(self, exception, status='error'):
+        self.error(f"({0:03d}) Exception caught during execution")
+        self.error(f"({1:03d}) Exception {exception}")
+        if exception.__traceback__:
+            for idx, tracebackItem in enumerate(traceback.format_list(traceback.extract_tb(exception.__traceback__))):
+                self.error(f"({2+idx:03d}) Traceback {traceback.format_exception(exception)[idx]}")
 
     # Logs
     def debug(self,message):

@@ -1,7 +1,6 @@
 import sys
 import logging
 sys.path.append('..')
-
 # Import Server utils and Logger utils
 from microservice_utils.RPCServer import RPCServer
 from microservice_utils.Logger import MSLogger

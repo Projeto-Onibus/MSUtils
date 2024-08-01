@@ -1,4 +1,5 @@
 import sys
+import time 
 import uuid
 sys.path.append('..')
 
@@ -35,14 +36,11 @@ parameters = {"matrix":[
     [7,8,9]
 ]}
 
-# Make a request
-try:
+for i in range(5):
+    # Make a request
     logger.info("Making call")
-    result = client.StartTransaction("get_diagonal",parameters)
+    result = client.StartTransaction("sum_diagonal",parameters)
     logger.info("Received result")
-except Exception as err:
-    print(f"Request failed due to exception: {err}")
-    result = None
 
-# Get results
-print('results',result)
+    # Get results
+    print('results',result)

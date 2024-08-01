@@ -35,21 +35,31 @@ class RPCClient(object):
 
         self.logger.info(f"Client initialized. Callback queue set as '{self.callback_queue}'")
 
+    def __del__(self):
+        self.channel.basic_cancel(self.callback_queue)
+        self.channel.close()
+        self.connection.close()
+
     def on_response(self, ch, method, props, body):
         self.logger.info("Got response!")
 
         if self.corr_id == props.correlation_id:
             # receives the correct message
             self.response = json.loads(body.decode('UTF-8'))
-            
+             
+            if not 'transaction_id' in self.response.keys():
+                
+                self.logger.critical("No transaction id on response")
+                self.logger.debug(f"keys in response: {self.response.keys()}")
+                raise Exception("Malformed response from server. All responses must have an associated Transaction id")
+
             # Assures that the transaction id is saved in the logger object
             if self.response['transaction_id'] != self.logger.GetTransactionId():
                 self.logger.critical("Response from another transaction")
                 raise Exception("Invalid transaction id for received process")
 
-            # removes transaction id from answer
-            #del self.response['transaction_id']
-            #del self.response['transaction_counter']
+            # Adds to transaction counter
+            self.logger.SetTransactionCounter(self.response['transaction_counter'])
 
     def MakeCall(self, name, n):
         """
@@ -76,11 +86,9 @@ class RPCClient(object):
                 correlation_id=self.corr_id,
             ),
             body=json.dumps(n))
-
-        self.connection.process_data_events(time_limit=self.timeout)
         
-        if not self.response:
-            return {'status_code':503,'error-message':"Service unresponsive or unavailable."} 
+        while self.response == None:
+            self.connection.process_data_events(time_limit=None)
 
         return self.response.copy()
     
