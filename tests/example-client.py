@@ -10,11 +10,12 @@ import logging
 
 # Import libraries
 from microservice_utils.RPCClient import RPCClient
+from microservice_utils.RPCCache import RPCCache
 from microservice_utils.Logger import MSLogger
 
 # Start logger to log data in loki server
 logger = MSLogger("client",host='localhost',port=3100)
-cache = MSCache(host='localhost',port=)
+cache = RPCCache(host='localhost',port=6379)
 logger.setLevel(logging.DEBUG)
 
 #
@@ -37,11 +38,11 @@ parameters = {"matrix":[
 # Make a request
 try:
     logger.info("Making call")
-    result = client.StartTransaction("sum_diagonal",parameters)
+    result = client.StartTransaction("get_diagonal",parameters)
     logger.info("Received result")
 except Exception as err:
     print(f"Request failed due to exception: {err}")
     result = None
 
 # Get results
-print(result)
+print('results',result)

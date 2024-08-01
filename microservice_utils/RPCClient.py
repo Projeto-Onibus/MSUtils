@@ -48,7 +48,8 @@ class RPCClient(object):
                 raise Exception("Invalid transaction id for received process")
 
             # removes transaction id from answer
-            del self.response['transaction_id']
+            #del self.response['transaction_id']
+            #del self.response['transaction_counter']
 
     def MakeCall(self, name, n):
         """
@@ -65,6 +66,7 @@ class RPCClient(object):
             raise Exception("Cannot use MakeCall without transaction id")
         
         n['transaction_id'] = self.logger.GetTransactionId()
+        n['transaction_counter'] = self.logger.GetTransactionCounter()
 
         self.channel.basic_publish(
             exchange='',

@@ -4,13 +4,17 @@ import logging
 
 import pika
 
-from .AppException import AppException
+from .AppException import AppException, ClientException
 from .RPCClient import RPCClient
 from .Logger import MSLogger
+from .RPCCache import RPCCache
 
 class RPCServer:
-    def __init__(self,host="localhost",logger,cache=None):
-
+    def __init__(self,host,logger:MSLogger,cache=None):
+        """
+        Initializes the server class. 
+        Needs the host for the RabbitMQ server and an MSLogger class
+        """
         self.logger = logger
 
         self.connection = pika.BlockingConnection(
@@ -23,52 +27,79 @@ class RPCServer:
         self.cache = cache 
 
     def AddMethod(self,name,method):
-        RPCMethod = RPCCall(name,self.logger,self.client,self.cache,method) 
+        RPCMethod = RPCCall(name,method, self.logger,self.client,self.cache) 
         CreateRPC(self.channel, name, RPCMethod)
     
     def Start(self):
         self.channel.start_consuming()
 
 
-def RPCCall(name,logger,client,cache,func):
+def RPCCall(name:str, func, logger: MSLogger, client:RPCClient, cache:RPCCache):
     """
-    Function to create a server response.
+    Function to create function handler to serve a query.
+    Creates numerous auxiliary functions that use other classes defined in the function.
+    Creates a 'on_call' function handler to pass to the RabbitMQ consumer method.
     """
     def on_call(ch, method, props, body):
 
         # Verifies for invalid data before passing arguments to function
         invalidData = False
-        
+
         # Defines default value for transaction ID in logs
-        logger.SetTransactionId(-1) 
+        logger.SetTransactionId("None") 
 
         requestData, response = ParseBodyToJSON(body)
-        if response:
-            return response
 
-        functionParameters, response = ParseTransactionParameters(requestData)
-        if response:
-            return response
+        if not response:
+            functionParameters, response = ParseTransactionParameters(requestData)
 
-        response = GetResponseFromCache(functionParameters)
+        # No logs before this
+        logger.info('Received request')
 
+        fromCache = False 
+        if not response:
+            fromCache = True 
+            response = GetResponseFromCache(functionParameters)
+            logger.info('Cached response')
+
+        if not response:
+            response = ApplyFunction(functionParameters)
+            
+        if response['status-code']==200 and not fromCache:
+            SetCache(parameters,response)
+        
+        response = SetTransactionParameters(response)
+        
+        # No logs after this
+
+        try:
+            PublishResponse(response)
+        except Exception as err:
+            logger.critical("Unable to send response due to unkonwn error")
+            logger.critical(f"{err}")
+
+        logger.EndTransaction()
 
     def GetResponseFromCache(parameters):
-        cacheKey =f'{name},{json.dumps(parameters)}'
-
-        response = cache.get(key)
-        if response:
-            logger.debug(f"Cached result '{response}'")
-            response = json.loads(response)
-            response['status-code'] = 200
+        response = None
+        if cache: 
+            response = cache.GetResult(name,parameters)
+            if response:
+                logger.info(f"Cached result '{response}'")
+                response['status-code'] = 200
         
         return response
 
-    def GenerateResponse(parameters):
+    def SetCache(parameters,response):
+        if cache: 
+            cache.SetResult(name,parameters,response) 
+
+    def ApplyFunction(parameters):
         try:
+            logger.debug("Function start")
             response = func(parameters,logger=logger,client=client)
-            if cache:
             logger.debug("Function end")
+            response['status-code'] = 200
         # Error given by function
         except ClientException as err:
             logger.debug("Client exception")
@@ -84,11 +115,10 @@ def RPCCall(name,logger,client,cache,func):
                 "error-message":"Internal server error",
                 "python-exception-type":type(err).__name__,
                 "python-exception-message":str(err)
-            } 
-        response['status-code'] = 200
-        response['transaction_id'] = logger.GetTransactionId()
-        response['transaction_counter'] = logger.GetTransactionCounter()
+            }
+        return response 
 
+    def PublishResponse(response):
         # Define response
         ch.basic_publish(exchange='',
             routing_key=props.reply_to,
@@ -96,8 +126,6 @@ def RPCCall(name,logger,client,cache,func):
                     props.correlation_id),
             body=json.dumps(response))
         ch.basic_ack(delivery_tag=method.delivery_tag)
-        
-        logger.EndTransaction()
 
 
     def ParseBodyToJSON(body):
@@ -115,29 +143,38 @@ def RPCCall(name,logger,client,cache,func):
                     "python-exception-type":type(err).__name__,
                     "python-exception-message":str(err)
             }
-            logger.error(f"Failed to convert data to JSON. Bad request from '{props.reply_to}'")
-             
+
         return parameters, response 
 
     def ParseTransactionParameters(parameters): 
         """
         Parses the transaction data inside request.
         """
-        if not 'transaction_id' in parameters.keys() or not 'transaction_counter' in parameters.keys():
-            response = {
-                'status-code':400,
-                'error-message':"No transaction id or counter set"
+        response=None
+        try: 
+            if not 'transaction_id' in parameters.keys() or not 'transaction_counter' in parameters.keys():
+                response = {
+                    'status-code':400,
+                    'error-message':"No transaction id or counter set"
+                }
+        
+            logger.SetTransactionId(parameters['transaction_id'])
+            logger.SetTransactionCounter(parameters['transaction_counter'])
+        
+            del parameters['transaction_id']
+            del parameters['transaction_counter']
+        except Exception as err:
+            response = {'status-code':502,
+                        'error-message': "Unexpected error",
+                        'python-error-message':f"{err}"
             }
-            logger.error(f"No transaction id was set by the request. Bad request from '{props.reply_to}'")
-        
-        logger.SetTransactionId(parameters['transaction_id'])
-        logger.SetTransactionCounter(parameters['transaction_counter'])
-
-        del parameters['transaction_id']
-        del parameters['transaction_counter']
-        
         return parameters, response 
-            
+    
+    def SetTransactionParameters(response):
+        response['transaction_id'] = logger.GetTransactionId()
+        response['transaction_counter'] = logger.GetTransactionCounter()
+        return response 
+
     return on_call
 
 def CreateRPC(channel, name, functionHandler):
