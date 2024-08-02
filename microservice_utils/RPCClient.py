@@ -2,19 +2,24 @@ import uuid
 import pika
 import json
 
-from .Logger import MSLogger
+import logging 
+from .Logger import MSLogger 
 
 class RPCClient(object):
     
 
     def __init__(self,host='localhost',logger=None):
         
-        if not logger or type(logger) != MSLogger:
-            raise Exception("MSLogger class must be passed")
-        
+        # Defaults to normal 
+        if not logger:
+            logger = logging.Logger()
+            logger.setLevel(logging.DEBUG)
+
         self.logger = logger
-        # Remove any previous transactions when creating client
-        self.logger.EndTransaction()
+        if type(self.logger) is MSLogger:
+            self.logger.SetTransactionId("000000000000")
+
+        self.logger.info("Initializing client")
 
         self.connection = pika.BlockingConnection(
             pika.ConnectionParameters(host='localhost'))
@@ -33,9 +38,16 @@ class RPCClient(object):
         self.corr_id = None
         self.timeout = 120 # Default timeout value
 
-        self.logger.info(f"Client initialized. Callback queue set as '{self.callback_queue}'")
+        self.logger.info(f"Client initialized")
+        self.logger.debug(f"Callback queue set as '{self.callback_queue}'")
 
     def __del__(self):
+        
+        if type(self.logger) is MSLogger:
+            self.logger.SetTransactionId("FFFFFFFFFFFF")
+        
+        self.logger.info("Exiting client")
+
         self.channel.basic_cancel(self.callback_queue)
         self.channel.close()
         self.connection.close()
@@ -46,20 +58,6 @@ class RPCClient(object):
         if self.corr_id == props.correlation_id:
             # receives the correct message
             self.response = json.loads(body.decode('UTF-8'))
-             
-            if not 'transaction_id' in self.response.keys():
-                
-                self.logger.critical("No transaction id on response")
-                self.logger.debug(f"keys in response: {self.response.keys()}")
-                raise Exception("Malformed response from server. All responses must have an associated Transaction id")
-
-            # Assures that the transaction id is saved in the logger object
-            if self.response['transaction_id'] != self.logger.GetTransactionId():
-                self.logger.critical("Response from another transaction")
-                raise Exception("Invalid transaction id for received process")
-
-            # Adds to transaction counter
-            self.logger.SetTransactionCounter(self.response['transaction_counter'])
 
     def MakeCall(self, name, n):
         """
@@ -72,12 +70,6 @@ class RPCClient(object):
         self.response = None
         self.corr_id = str(uuid.uuid4())
         
-        if not self.logger.HasTransactionId():
-            raise Exception("Cannot use MakeCall without transaction id")
-        
-        n['transaction_id'] = self.logger.GetTransactionId()
-        n['transaction_counter'] = self.logger.GetTransactionCounter()
-
         self.channel.basic_publish(
             exchange='',
             routing_key=name,
@@ -103,28 +95,43 @@ class RPCClient(object):
 
         # Uma nova transação deve ter um novo ID 
         # Apenas verifica se uma transação antiga estava salva no logger
-        hasTransactionId = False
-        if self.logger.HasTransactionId():
-            hasTransactionId = True
-            oldTransactionId = self.logger.transactionId
         
-        # Creates a new transaction id before warning of overwrite with previous transaction
-        self.logger.NewTransaction()
-        if hasTransactionId:
-            self.logger.warning(f"Started from previously unresolved transaction: [{oldTransactionId}]")
-        self.logger.info(f"Started new transaction of type '{name}'")
+        if type(self.logger) is MSLogger:
+            self.logger.NewTransaction()
+            n['transaction_id'] = self.logger.GetTransactionId()
+            n['transaction_counter'] = self.logger.GetTransactionCounter()
+        else:
+            n['transaction_id'] = str(uuid.uuid4())[-12]
+            n['transaction_counter'] = 0
 
-        executionFailed = False
-        try:
-            results = self.MakeCall(name,n)
-        except Exception as err:
-            executionFailed = True
-            exceptionRaised = err
-        finally:
-            # Finalizes the transaction before raising the exception
-            self.logger.EndTransaction()
-        
-        if executionFailed:
-            raise exceptionRaised
+        # Sends the message
+        self.logger.debug(f"Making call")
+        results = self.MakeCall(name,n)
+        self.logger.debug(f"Result: {results}")
+        # Checks if response has required fields: transaction_id, transaction_counter and status_code
+        if not 'transaction_counter' in results.keys():
+            self.logger.critical("No transaction_counter in response")
+            self.logger.debug(f"keys in response: {self.response.keys()}")
+            raise Exception("Malformed server response on transaction_counter")
+        if not 'transaction_id' in results.keys():
+            self.logger.critical("No transaction id on response")
+            self.logger.debug(f"keys in response: {self.response.keys()}")
+            raise Exception("Malformed server response on transaction_id")
+        if not 'status_code' in results.keys():
+            self.logger.critical("No status_code in response")
+            self.logger.debug(f"keys in response: {self.response.keys()}")
+            raise Exception("Malformed server response on status_code")
+
+        if type(self.logger) is MSLogger:
+            if self.logger.GetTransactionId() != results['transaction_id']:
+                self.logger.critical("Response from another transaction")
+                self.logger.debug(f"mismatched ids: [{self.logger.GetTransactionId()}] sent <-> received [{results['transaction_id']}]")
+                raise Exception("Returned transaction_id is different from when the request was made")
+            self.logger.SetTransactionCounter(results['transaction_counter'])     
+        else:
+            if n['transaction_id'] != results['transaction_id']:
+                self.logger.critical("Response from another transaction")
+                self.logger.debug(f"mismatched ids: [{n['transaction_id']}] sent <-> received [{results['transaction_id']}]")
+                raise Exception("Returned transaction_id is different from when the request was made")
 
         return results

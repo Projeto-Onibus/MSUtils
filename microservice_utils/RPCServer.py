@@ -27,12 +27,46 @@ class RPCServer:
         self.cache = cache 
 
     def AddMethod(self,name,method):
-        RPCMethod = RPCCall(name,method, self.logger,self.client,self.cache) 
+        RPCMethod = RPCCall(name,method, self.logger,self,self.cache) 
         CreateRPC(self.channel, name, RPCMethod)
     
     def Start(self):
         self.channel.start_consuming()
 
+    def MakeCall(self, name, parameters):
+        """
+        Makes call from the server
+        """
+        # Add transaction parameters 
+        parameters['transaction_id'] = self.logger.GetTransactionId()
+        parameters['transaction_counter'] = self.logger.GetTransactionCounter()
+
+        self.logger.debug(f"Requesting {name} with parameters {parameters}")
+
+        # Make a call 
+        response = self.client.MakeCall(name,parameters)
+    
+        if not 'transaction_counter' in response.keys():
+            raise Exception("Malformed response from service")
+
+        if parameters['transaction_id'] != response['transaction_id']:
+            raise Exception("Invalid transaction id received from service")
+            
+        # Sets the new transaction counter
+        self.logger.SetTransactionCounter(response['transaction_counter']+1)
+        
+        logger.debug('Received response')
+        
+        # Adds exception if 
+        if response['status_code'] != 200:
+            logger.error("Received error from service")
+            if 'error_message' in response.keys():
+                logger.error(f"Error message: {response['error_message']}")
+
+        del response['transaction_id']
+        del response['transaction_counter']
+        
+        return response
 
 def RPCCall(name:str, func, logger: MSLogger, client:RPCClient, cache:RPCCache):
     """
@@ -59,15 +93,14 @@ def RPCCall(name:str, func, logger: MSLogger, client:RPCClient, cache:RPCCache):
             logger.debug(f"Parameters sent: {functionParameters}")
 
             fromCache = False 
-            if not response:
-                fromCache = True 
-                response = GetResponseFromCache(functionParameters)
+            response = GetResponseFromCache(functionParameters)
+            if response:
+                fromCache = True
                 logger.info('Cached response')
-
-            if not response:
+            else:
                 response = ApplyFunction(functionParameters)
                 
-            if response['status-code']==200 and not fromCache:
+            if response['status_code']==200 and not fromCache:
                 SetCache(parameters,response)
             
             response = SetTransactionParameters(response)
@@ -76,8 +109,8 @@ def RPCCall(name:str, func, logger: MSLogger, client:RPCClient, cache:RPCCache):
             logger.error("Caught exception from the server's callback function")
             logger.LogException(err)
             response = {
-                'status-code':502,
-                'error-message':"Internal server error"
+                'status_code':502,
+                'error_message':"Internal server error"
             }
 
         try:
@@ -98,7 +131,7 @@ def RPCCall(name:str, func, logger: MSLogger, client:RPCClient, cache:RPCCache):
             response = cache.GetResult(name,parameters)
             if response:
                 logger.info(f"Cached result '{response}'")
-                response['status-code'] = 200
+                response['status_code'] = 200
         
         return response
 
@@ -107,19 +140,19 @@ def RPCCall(name:str, func, logger: MSLogger, client:RPCClient, cache:RPCCache):
             cache.SetResult(name,parameters,response) 
 
     def ApplyFunction(parameters):
-        if 'status-code' in parameters.keys():
-            del parameters['status-code']
+        if 'status_code' in parameters.keys():
+            del parameters['status_code']
         try:
             logger.debug("Function start")
             response = func(parameters,logger=logger,client=client)
             logger.debug("Function end")
-            response['status-code'] = 200
+            response['status_code'] = 200
         # Error given by function
         except ClientException as err:
             logger.info("Caught client exception")
             response = {
-                    'status-code': 400,
-                    "error-message": err.message
+                    'status_code': 400,
+                    "error_message": err.message
             }
         return response 
 
@@ -133,10 +166,10 @@ def RPCCall(name:str, func, logger: MSLogger, client:RPCClient, cache:RPCCache):
             parameters = json.loads(body.decode('UTF-8'))
         except Exception as err:
             response = {
-                    'status-code':400,
-                    "error-message":"Invalid JSON message",
-                    "python-exception-type":type(err).__name__,
-                    "python-exception-message":str(err)
+                    'status_code':400,
+                    "error_message":"Invalid JSON message",
+                    "python_exception-type":type(err).__name__,
+                    "python_exception-message":str(err)
             }
 
         return parameters, response 
@@ -149,8 +182,8 @@ def RPCCall(name:str, func, logger: MSLogger, client:RPCClient, cache:RPCCache):
         try: 
             if not 'transaction_id' in parameters.keys() or not 'transaction_counter' in parameters.keys():
                 response = {
-                    'status-code':400,
-                    'error-message':"No transaction id or counter set"
+                    'status_code':400,
+                    'error_message':"No transaction id or counter set"
                 }
         
             logger.SetTransactionId(parameters['transaction_id'])
@@ -159,15 +192,15 @@ def RPCCall(name:str, func, logger: MSLogger, client:RPCClient, cache:RPCCache):
             del parameters['transaction_id']
             del parameters['transaction_counter']
 
-            if 'status-code' in parameters.keys():
-                del parameters['status-code']
+            if 'status_code' in parameters.keys():
+                del parameters['status_code']
 
         except Exception as err:
             logger.error("Exception caught when parsing transaction parameters")
             logger.LogException(err)
-            response = {'status-code':502,
-                        'error-message': "Unexpected error",
-                        'python-error-message':f"{err}"
+            response = {'status_code':502,
+                        'error_message': "Unexpected error",
+                        'python_error_message':f"{err}"
             }
 
         return parameters, response 

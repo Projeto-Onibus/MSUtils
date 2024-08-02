@@ -9,14 +9,18 @@ from microservice_utils.Logger import MSLogger
 logger = MSLogger("sum_diagonal",host='localhost',port=3100)
 logger.setLevel(logging.DEBUG)
 
-def SumDiagonals(parameters,logger,client):
+def SumDiagonals(parameters,logger,client:RPCServer):
     result = {}
     
     logger.info("Inside function defined")
 
-    # Makes a request to the 'sum_diagonal' MS 
-    logger.debug(f"Channel state: closed={client.channel.is_closed}, closing={client.channel.is_closing}, opening={client.channel.is_opening}, open={client.channel.is_open}")
     partials = client.MakeCall('get_diagonal',parameters)
+    if partials['status-code'] != 200:
+        logger.error("Error on service request")
+        logger.debug(f"Error ({partials['status-code']}) Message: {partials['error-message'] if 'error-message' in partials.keys() else ''}")
+        return partials
+    else:
+        del partials['status-code']
 
     logger.info(f"Received data from MS: {partials.keys()}")
 

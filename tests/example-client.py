@@ -39,7 +39,7 @@ parameters = {"matrix":[
 for i in range(5):
     # Make a request
     logger.info("Making call")
-    result = client.StartTransaction("sum_diagonal",parameters)
+    result = client.StartTransaction(f"{sys.argv[1]}_diagonal",parameters)
     logger.info("Received result")
 
     # Get results
