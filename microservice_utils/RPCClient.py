@@ -53,8 +53,6 @@ class RPCClient(object):
         self.connection.close()
 
     def on_response(self, ch, method, props, body):
-        self.logger.info("Got response!")
-
         if self.corr_id == props.correlation_id:
             # receives the correct message
             self.response = json.loads(body.decode('UTF-8'))
