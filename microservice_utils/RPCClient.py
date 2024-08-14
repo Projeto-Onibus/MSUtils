@@ -47,7 +47,8 @@ class RPCClient(object):
             self.logger.SetTransactionId("FFFFFFFFFFFF")
         
         self.logger.info("Exiting client")
-
+        
+        del self.logger
         self.channel.basic_cancel(self.callback_queue)
         self.channel.close()
         self.connection.close()

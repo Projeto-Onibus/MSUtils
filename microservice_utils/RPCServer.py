@@ -15,31 +15,45 @@ class RPCServer:
         Initializes the server class. 
         Needs the host for the RabbitMQ server and an MSLogger class
         """
+        # Receives a python logger 
         self.logger = logger
 
+        # RabbitMQ server connection
         self.connection = pika.BlockingConnection(
             pika.ConnectionParameters(host=host))
-
         self.channel = self.connection.channel()
-        
-        self.client = RPCClient(host=host,logger=logger)
-        
+
+        # Redis cache initialization
         self.cache = cache 
 
+    def _CreateConsumerRPC(self, name, functionHandler):
+        """
+        Internal function that creates an RPC consumer based on a queue name and a function handler for the current broker.
+        """
+        self.channel.queue_declare(queue=name)
+        self.channel.basic_qos(prefetch_count=1)
+        self.channel.basic_consume(queue=name,on_message_callback=functionHandler,auto_ack=True)
+
     def AddMethod(self,name,method):
-        RPCMethod = RPCCall(name,method, self.logger,self,self.cache) 
-        CreateRPC(self.channel, name, RPCMethod)
+        """
+        Register the server to consume from the queue `name` and process the data with `method`.
+        The method must receive a single JSON object as paramter (can validate with schema) and return a JSON object.
+        """
+        RPCMethod = CreateRPCCall(name,method, self.logger,self,self.cache) 
+        self._CreateConsumerRPC(name, RPCMethod)
     
     def Start(self):
+        """
+        Initializes the server after all methods are declared. Stays on an infinite loop.
+        """
         self.channel.start_consuming()
 
-    def MakeCall(self, name, parameters):
+    def MakeRPCCall(self, name, parameters):
         """
-        Makes call from the server
+        Makes an RPC call for another MS. It raises an exception based on the request
         """
-        # Add transaction parameters 
-        parameters['transaction_id'] = self.logger.GetTransactionId()
-        parameters['transaction_counter'] = self.logger.GetTransactionCounter()
+        
+        parameters = self.SetTransactionParameters(parameters)
 
         self.logger.debug(f"Requesting {name} with parameters {parameters}")
 
@@ -57,7 +71,7 @@ class RPCServer:
         
         logger.debug('Received response')
         
-        # Adds exception if 
+        # Adds exception that returns the original message in status code
         if response['status_code'] != 200:
             logger.error("Received error from service")
             if 'error_message' in response.keys():
@@ -68,7 +82,7 @@ class RPCServer:
         
         return response
 
-def RPCCall(name:str, func, logger: MSLogger, client:RPCClient, cache:RPCCache):
+def CreateRPCCall(name:str, func, logger: MSLogger, client:RPCClient, cache:RPCCache):
     """
     Function to create function handler to serve a query.
     Creates numerous auxiliary functions that use other classes defined in the function.
@@ -103,8 +117,6 @@ def RPCCall(name:str, func, logger: MSLogger, client:RPCClient, cache:RPCCache):
             if response['status_code']==200 and not fromCache:
                 SetCache(parameters,response)
             
-            response = SetTransactionParameters(response)
-            
         except Exception as err:
             logger.error("Caught exception from the server's callback function")
             logger.LogException(err)
@@ -112,6 +124,8 @@ def RPCCall(name:str, func, logger: MSLogger, client:RPCClient, cache:RPCCache):
                 'status_code':502,
                 'error_message':"Internal server error"
             }
+
+        response = SetTransactionParameters(response)
 
         try:
             ch.basic_publish(exchange='',
@@ -206,19 +220,13 @@ def RPCCall(name:str, func, logger: MSLogger, client:RPCClient, cache:RPCCache):
         return parameters, response 
     
     def SetTransactionParameters(response):
+        """
+        Function that writes the `transaction_id` and `transaction_counter` in a JSON object 
+        """
         response['transaction_id'] = logger.GetTransactionId()
         response['transaction_counter'] = logger.GetTransactionCounter()
         return response 
 
     return on_call
 
-def CreateRPC(channel, name, functionHandler):
-    channel.queue_declare(queue=name)
-    channel.basic_qos(prefetch_count=1)
-    channel.basic_consume(queue=name,on_message_callback=functionHandler,auto_ack=True)
 
-
-def InitiateMethods(channel,methodList):
-    for item in methodList:
-        logger.debug(f"Initiating method {item['name']}")
-        CreateRPC(channel, item['name'], item['method'])
