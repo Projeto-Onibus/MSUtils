@@ -115,7 +115,7 @@ def CreateRPCCall(name:str, func, logger: MSLogger, client:RPCClient, cache:RPCC
                 response = ApplyFunction(functionParameters)
                 
             if response['status_code']==200 and not fromCache:
-                SetCache(parameters,response)
+                SetCache(functionParameters,response)
             
         except Exception as err:
             logger.error("Caught exception from the server's callback function")
