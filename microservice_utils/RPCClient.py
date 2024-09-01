@@ -22,7 +22,8 @@ class RPCClient(object):
         self.logger.info("Initializing client")
 
         self.connection = pika.BlockingConnection(
-            pika.ConnectionParameters(host='localhost'))
+            pika.ConnectionParameters(host=host)
+        )
 
         self.channel = self.connection.channel()
 
@@ -41,17 +42,6 @@ class RPCClient(object):
         self.logger.info(f"Client initialized")
         self.logger.debug(f"Callback queue set as '{self.callback_queue}'")
 
-    def __del__(self):
-        
-        if type(self.logger) is MSLogger:
-            self.logger.SetTransactionId("FFFFFFFFFFFF")
-        
-        self.logger.info("Exiting client")
-        
-        del self.logger
-        self.channel.basic_cancel(self.callback_queue)
-        self.channel.close()
-        self.connection.close()
 
     def on_response(self, ch, method, props, body):
         if self.corr_id == props.correlation_id:
